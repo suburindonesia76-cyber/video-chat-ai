@@ -304,8 +304,14 @@ async function getModelList(){
   cachedModels = (data.models || [])
     .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
     .map(m => m.name.replace('models/', ''))
-    .filter(n => !/tts|embedding|image|vision/i.test(n));
+    .filter(n => !/tts|embedding|image|vision|thinking/i.test(n));
   return cachedModels;
+}
+
+function buildSystemPrompt(){
+  const today = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  return SYSTEM_PROMPT + '\nHari ini: ' + today + '. Jika ditanya hari/tanggal, jawab berdasarkan info ini.'
+    + '\nPENTING: Langsung jawab saja. JANGAN tampilkan proses berpikirmu, instruksi, atau penjelasan tambahan.';
 }
 
 async function tryModel(modelName, contents){
@@ -314,7 +320,7 @@ async function tryModel(modelName, contents){
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      system_instruction: { parts: [{ text: buildSystemPrompt() }] },
       contents,
       generationConfig: { maxOutputTokens: 300, temperature: 0.9 }
     })
