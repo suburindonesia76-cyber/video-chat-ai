@@ -124,7 +124,7 @@
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Model</label>
     <div class="model-row">
-      <input id="modelInput" type="text" placeholder="gemini-2.0-flash">
+      <input id="modelInput" type="text" placeholder="gemini-3.8-flash">
       <button class="btn ghost small" id="loadModelsBtn" title="Muat daftar model dari API">↻</button>
     </div>
     <label>Pilih dari daftar (setelah tekan ↻)</label>
@@ -147,7 +147,7 @@ const muteBtn = document.getElementById('muteBtn');
 const hint = document.getElementById('hint');
 
 let apiKey = localStorage.getItem('aya_api_key') || '';
-let model = localStorage.getItem('aya_model') || 'gemini-2.0-flash';
+let model = localStorage.getItem('aya_model') || 'gemini-3.8-flash';
 let muted = localStorage.getItem('aya_muted') === '1';
 let history = [];
 let busy = false;
@@ -175,7 +175,7 @@ document.getElementById('settingsBtn').onclick = () => {
 document.getElementById('closeSettings').onclick = () => settingsModal.classList.remove('open');
 document.getElementById('saveSettings').onclick = () => {
   apiKey = apiKeyInput.value.trim();
-  model = modelInput.value.trim() || 'gemini-2.0-flash';
+  model = modelInput.value.trim() || 'gemini-3.8-flash';
   localStorage.setItem('aya_api_key', apiKey);
   localStorage.setItem('aya_model', model);
   settingsModal.classList.remove('open');
