@@ -23,6 +23,7 @@
     border:1px solid rgba(232,121,168,.35);
   }
   #stageVideo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  #stageVideo{ transition:opacity .3s ease; }
   #stage.talking #stageVideo{ animation:stagePulse 1.4s ease-in-out infinite; }
   @keyframes stagePulse{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.035);} }
   .stage-top{
@@ -165,10 +166,38 @@ const stageVideo = document.getElementById('stageVideo');
 const muteBtn = document.getElementById('muteBtn');
 const hint = document.getElementById('hint');
 
-fetch('avatar.txt').then(r => r.text()).then(t => {
-  stageVideo.src = 'data:video/mp4;base64,' + t.trim();
-  stageVideo.play().catch(()=>{});
-}).catch(()=>{});
+const EMOTION_VIDEOS = {};
+async function loadEmotionVideos(){
+  const files = { neutral: 'avatar.txt', happy: 'avatar_happy.txt', sad: 'avatar_sad.txt', flirty: 'avatar_flirty.txt' };
+  for (const [emo, file] of Object.entries(files)) {
+    try {
+      const t = await (await fetch(file)).text();
+      EMOTION_VIDEOS[emo] = 'data:video/mp4;base64,' + t.trim();
+    } catch(_){}
+  }
+  setEmotionVideo('neutral', true);
+}
+function setEmotionVideo(emo, instant){
+  const uri = EMOTION_VIDEOS[emo] || EMOTION_VIDEOS['neutral'];
+  if (!uri || stageVideo.dataset.emo === emo) { if (uri) stageVideo.play().catch(()=>{}); return; }
+  stageVideo.dataset.emo = emo;
+  const swap = () => {
+    stageVideo.src = uri;
+    stageVideo.play().catch(()=>{});
+    stageVideo.style.opacity = '1';
+  };
+  if (instant) { swap(); return; }
+  stageVideo.style.opacity = '0';
+  setTimeout(swap, 300);
+}
+function detectEmotion(text){
+  const t = (text || '').toLowerCase();
+  if (/haha|hehe|wkwk|senang|bahagia|asik|seru|yeay|\u{1F604}|\u{1F60A}|\u{1F601}|❤|love/iu.test(t)) return 'happy';
+  if (/sedih|maaf|kasihan|sabar ya|\u{1F622}|\u{1F62D}/iu.test(t)) return 'sad';
+  if (/sayang|kangen|rindu|manja|\u{1F618}|\u{1F970}/iu.test(t)) return 'flirty';
+  return 'neutral';
+}
+loadEmotionVideos();
 
 let apiKey = localStorage.getItem('aya_api_key') || '';
 let model = localStorage.getItem('aya_model') || 'gemini-3.8-flash';
@@ -595,6 +624,7 @@ async function send(){
   if (cmd) {
     addMsg(cmd, 'bot');
     history.push({ who:'bot', text: cmd });
+    setEmotionVideo(detectEmotion(cmd));
     speak(cmd);
     busy = false; sendBtn.disabled = false;
     input.focus();
@@ -606,6 +636,7 @@ async function send(){
     hideTyping();
     history.push({ who:'bot', text: reply });
     addMsg(reply, 'bot');
+    setEmotionVideo(detectEmotion(reply));
     speak(reply);
   } catch(e) {
     hideTyping();
@@ -622,6 +653,7 @@ setTimeout(() => {
   const greet = 'Hai! Aku Aya. Aku bisa ngobrol, bukain situs, nyatet, ngitung, sampai nelpon. Mau coba apa hari ini?';
   addMsg(greet, 'bot');
   history.push({ who:'bot', text: greet });
+  setEmotionVideo('happy');
   speak(greet);
 }, 600);
 </script>
