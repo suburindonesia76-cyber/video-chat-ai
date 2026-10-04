@@ -293,8 +293,12 @@ function setTtsStatus(s){
   if (el) el.textContent = s ? ('Status suara: ' + s) : '';
 }
 
+function showVoiceFail(){
+  hint.textContent = '🔇 Suara gagal diputar di HP ini. Buka ⚙️ → tekan Tes suara, lalu kirim tulisan statusnya ke saya.';
+}
+
 function browserTts(text, cb){
-  const fin = (ok) => { setTtsStatus(ok ? 'OK (suara HP)' : 'gagal — coba ketuk Tes suara'); cb(); };
+  const fin = (ok) => { setTtsStatus(ok ? 'OK (suara HP)' : 'gagal total'); if (!ok) showVoiceFail(); cb(); };
   try {
     if (!('speechSynthesis' in window)) { fin(false); return; }
     speechSynthesis.cancel();
