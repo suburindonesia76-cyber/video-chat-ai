@@ -304,7 +304,8 @@ async function getModelList(){
   cachedModels = (data.models || [])
     .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
     .map(m => m.name.replace('models/', ''))
-    .filter(n => !/tts|embedding|image|vision|thinking/i.test(n));
+    .filter(n => !/tts|embedding|image|vision|thinking/i.test(n))
+    .sort((a, b) => (b.includes('flash') ? 1 : 0) - (a.includes('flash') ? 1 : 0));
   return cachedModels;
 }
 
@@ -333,8 +334,14 @@ async function tryModel(modelName, contents){
     throw err;
   }
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   if (!text) throw new Error('Respons kosong dari AI.');
+  // jika model membocorkan proses berpikir (* Option, * Constraint, dsb),
+  // ambil kalimat jawaban terakhir yang diapit tanda kutip
+  if (/\*\s*(Option|Constraint|Max \d+ sentences)/i.test(text)) {
+    const quotes = [...text.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+    if (quotes.length) text = quotes[quotes.length - 1];
+  }
   return text;
 }
 
