@@ -123,7 +123,7 @@
 <div class="hint" id="hint"></div>
 
 <div id="composer">
-  <input id="input" type="text" placeholder="Ketik pesan..." autocomplete="off" enterkeyhint="send">
+  <input id="input" type="text" placeholder="Ketik pesan... (cth: buka youtube)" autocomplete="off" enterkeyhint="send">
   <button id="send" title="Kirim">➤</button>
 </div>
 
@@ -518,6 +518,69 @@ async function askGemini(){
   throw new Error(msg);
 }
 
+// ===== Perintah langsung (dikerjakan HP sendiri, tanpa AI) =====
+const SITES = {
+  youtube: 'https://m.youtube.com', google: 'https://www.google.com',
+  whatsapp: 'https://web.whatsapp.com', instagram: 'https://www.instagram.com',
+  tiktok: 'https://www.tiktok.com', facebook: 'https://m.facebook.com',
+  maps: 'https://maps.google.com', gmail: 'https://mail.google.com',
+  shopee: 'https://shopee.co.id', tokopedia: 'https://www.tokopedia.com',
+  netflix: 'https://www.netflix.com'
+};
+const getNotes = () => { try { return JSON.parse(localStorage.getItem('aya_notes') || '[]'); } catch(_) { return []; } };
+const getContacts = () => { try { return JSON.parse(localStorage.getItem('aya_contacts') || '{}'); } catch(_) { return {}; } };
+
+function handleCommand(raw){
+  const text = raw.trim(), t = text.toLowerCase();
+  let m;
+  if ((m = t.match(/^buka\s+(.+)/))) {
+    const q = m[1].trim(), name = q.replace(/\s+/g, '');
+    window.open(SITES[name] || ('https://www.google.com/search?q=' + encodeURIComponent(q)), '_blank');
+    return 'Siap, aku bukakan ' + q + '~';
+  }
+  if ((m = t.match(/^(?:putar|setel|play)\s+(.+)/))) {
+    window.open('https://m.youtube.com/results?search_query=' + encodeURIComponent(m[1].trim()), '_blank');
+    return 'Oke, aku carikan videonya di YouTube~';
+  }
+  if ((m = t.match(/^cari\s+(.+)/))) {
+    window.open('https://www.google.com/search?q=' + encodeURIComponent(m[1].trim()), '_blank');
+    return 'Aku carikan info tentang "' + m[1].trim() + '" ya~';
+  }
+  if ((m = t.match(/^catat\s+(.+)/))) {
+    const n = getNotes(); n.push({ text: m[1].trim(), at: Date.now() });
+    localStorage.setItem('aya_notes', JSON.stringify(n));
+    return 'Sudah aku catat: "' + m[1].trim() + '"';
+  }
+  if (/^(lihat\s+)?catatan/.test(t)) {
+    const n = getNotes();
+    if (!n.length) return 'Belum ada catatan, sayang.';
+    return 'Catatanmu:\n' + n.map((x, i) => (i + 1) + '. ' + x.text).join('\n');
+  }
+  if (/^hapus catatan/.test(t)) { localStorage.removeItem('aya_notes'); return 'Catatannya sudah aku hapus semua.'; }
+  if ((m = t.match(/^simpan nomor\s+(\S+)\s+(\+?\d[\d\s]*)/))) {
+    const c = getContacts(); c[m[1]] = m[2].replace(/\s+/g, '');
+    localStorage.setItem('aya_contacts', JSON.stringify(c));
+    return 'Nomor ' + m[1] + ' sudah aku simpan.';
+  }
+  if ((m = t.match(/^(?:telepon|telpon|hubungi)\s+(\S+)/))) {
+    const num = getContacts()[m[1]];
+    if (!num) return 'Aku belum punya nomor ' + m[1] + '. Simpan dulu: "simpan nomor ' + m[1] + ' 08..."';
+    location.href = 'tel:' + num;
+    return 'Menelpon ' + m[1] + '...';
+  }
+  if ((m = t.match(/^hitung\s+(.+)/))) {
+    const expr = m[1].replace(/,/g, '.').replace(/×/g, '*').replace(/÷/g, '/').replace(/x/gi, '*');
+    if (!/^[0-9+\-*/().\s^%]+$/.test(expr)) return 'Itu bukan hitungan yang valid, sayang.';
+    try {
+      const val = Function('"use strict";return(' + expr.replace(/\^/g, '**') + ')')();
+      if (typeof val !== 'number' || !isFinite(val)) throw 0;
+      return 'Hasilnya ' + (Math.round(val * 1000) / 1000) + '.';
+    } catch(_) { return 'Aku nggak bisa ngitung itu.'; }
+  }
+  if (/jam berapa/.test(t)) return 'Sekarang jam ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '.';
+  return null;
+}
+
 async function send(){
   const text = input.value.trim();
   if (!text || busy) return;
@@ -528,6 +591,15 @@ async function send(){
   input.value = '';
   addMsg(text, 'user');
   history.push({ who:'user', text });
+  const cmd = handleCommand(text);
+  if (cmd) {
+    addMsg(cmd, 'bot');
+    history.push({ who:'bot', text: cmd });
+    speak(cmd);
+    busy = false; sendBtn.disabled = false;
+    input.focus();
+    return;
+  }
   showTyping();
   try {
     const reply = await askGemini();
@@ -547,7 +619,7 @@ sendBtn.onclick = send;
 input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
 
 setTimeout(() => {
-  const greet = 'Hai! Aku Aya. Senang ketemu kamu! Mau ngobrol apa hari ini?';
+  const greet = 'Hai! Aku Aya. Aku bisa ngobrol, bukain situs, nyatet, ngitung, sampai nelpon. Mau coba apa hari ini?';
   addMsg(greet, 'bot');
   history.push({ who:'bot', text: greet });
   speak(greet);
