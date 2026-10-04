@@ -178,6 +178,7 @@ async function loadEmotionVideos(){
   setEmotionVideo('neutral', true);
 }
 function setEmotionVideo(emo, instant){
+  if (currentOutfit !== 'default') return;
   const uri = EMOTION_VIDEOS[emo] || EMOTION_VIDEOS['neutral'];
   if (!uri || stageVideo.dataset.emo === emo) { if (uri) stageVideo.play().catch(()=>{}); return; }
   stageVideo.dataset.emo = emo;
@@ -190,6 +191,28 @@ function setEmotionVideo(emo, instant){
   stageVideo.style.opacity = '0';
   setTimeout(swap, 300);
 }
+const OUTFITS = { merah: 'avatar_baju_merah.txt', kasual: 'avatar_baju_kasual.txt', hijab: 'avatar_baju_hijab.txt' };
+let currentOutfit = 'default';
+const outfitCache = {};
+
+async function setOutfit(name){
+  currentOutfit = name;
+  if (name === 'default') { setEmotionVideo('neutral', true); return; }
+  try {
+    if (!outfitCache[name]) {
+      const t = await (await fetch(OUTFITS[name])).text();
+      outfitCache[name] = 'data:video/mp4;base64,' + t.trim();
+    }
+    stageVideo.dataset.emo = 'outfit-' + name;
+    stageVideo.style.opacity = '0';
+    setTimeout(() => {
+      stageVideo.src = outfitCache[name];
+      stageVideo.play().catch(()=>{});
+      stageVideo.style.opacity = '1';
+    }, 300);
+  } catch(_) { currentOutfit = 'default'; }
+}
+
 function detectEmotion(text){
   const t = (text || '').toLowerCase();
   if (/haha|hehe|wkwk|senang|bahagia|asik|seru|yeay|\u{1F604}|\u{1F60A}|\u{1F601}|❤|love/iu.test(t)) return 'happy';
@@ -607,6 +630,14 @@ function handleCommand(raw){
     } catch(_) { return 'Aku nggak bisa ngitung itu.'; }
   }
   if (/jam berapa/.test(t)) return 'Sekarang jam ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '.';
+  if (/^(daftar|list)\s+baju|baju apa/.test(t)) return 'Baju yang tersedia: merah, kasual, hijab. Ketik misalnya "ganti baju merah".';
+  if ((m = t.match(/^ganti baju\s+(.+)/))) {
+    const name = m[1].trim().replace(/\s+/g, '');
+    if (name === 'awal' || name === 'default' || name === 'semula') { setOutfit('default'); return 'Aku kembali ke baju awal~'; }
+    if (!OUTFITS[name]) return 'Bajunya nggak ada, sayang. Pilih: merah, kasual, atau hijab.';
+    setOutfit(name);
+    return 'Siap, aku ganti ke baju ' + name + '~ Lihat nih!';
+  }
   return null;
 }
 
