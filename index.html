@@ -274,7 +274,7 @@ function showTyping(){
 }
 function hideTyping(){ document.getElementById('typing')?.remove(); }
 
-let currentAudio = null, speakTimer = null, ttsToken = 0;
+let currentAudio = null, speakTimer = null, ttsToken = 0, speakSeq = 0;
 
 // dipanggil sinkron di dalam tap tombol kirim agar browser mengizinkan audio
 function unlockAudio(){
@@ -334,10 +334,10 @@ function playDataUri(uri){
 async function geminiTts(text){
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' + encodeURIComponent(apiKey);
   const body = {
-    contents: [{ parts: [{ text: 'Ucapkan dengan ceria dan manja: ' + text }] }],
+    contents: [{ parts: [{ text: 'Ucapkan seperti gadis muda yang ceria, manja, dan natural: ' + text }] }],
     generationConfig: {
       responseModalities: ['AUDIO'],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Leda' } } }
     }
   };
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -413,11 +413,11 @@ document.getElementById('testSoundBtn').onclick = () => {
   unlockAudio();
   if (muted) { muted = false; localStorage.setItem('aya_muted', '0'); updateMuteIcon(); }
   setTtsStatus('mengetes…');
-  playTts('Halo! Ini suara Aya. Kalau kamu mendengar ini, berarti suara sudah berfungsi.');
+  speak('Halo! Ini suara Aya. Kalau kamu mendengar ini, berarti suara sudah berfungsi.');
 };
 
 function stopSpeak(){
-  ttsToken++;
+  ttsToken++; speakSeq++;
   if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
   if (currentAudio) { try { currentAudio.pause(); } catch(_){} currentAudio = null; }
   stage.classList.remove('talking');
@@ -425,15 +425,24 @@ function stopSpeak(){
 }
 
 // video avatar hanya bergerak saat bot "berbicara", mengikuti chat
-function speak(text){
+async function speak(text){
   stopSpeak();
-  const clean = text.replace(/[*_#`]/g, '').trim().slice(0, 600);
+  const seq = ++speakSeq;
+  const clean = text.replace(/[*_#`]/g, '').trim().slice(0, 500);
   if (!clean) return;
-  const dur = Math.min(25000, Math.max(5000, clean.length * 110));
+  const stillMine = () => seq === speakSeq;
   stage.classList.add('talking');
   try { stageVideo.play().catch(()=>{}); } catch(_){}
-  speakTimer = setTimeout(stopSpeak, dur);
-  if (!muted) playTts(clean);
+  if (muted) {
+    const dur = Math.min(20000, Math.max(4000, clean.length * 110));
+    await new Promise(r => setTimeout(r, dur));
+  } else {
+    await playTts(clean);
+  }
+  if (stillMine()) {
+    stage.classList.remove('talking');
+    try { stageVideo.pause(); } catch(_){}
+  }
 }
 
 let cachedModels = null;
