@@ -224,6 +224,8 @@ stageVideo.addEventListener('ended', () => {
   playNeutralLoop();
 });
 const OUTFITS = { merah: 'avatar_baju_merah.txt', kasual: 'avatar_baju_kasual.txt', hijab: 'avatar_baju_hijab.txt', sporty: 'avatar_baju_sporty.txt', gaun: 'avatar_baju_gaun.txt' };
+let currentOutfit = 'default';
+const outfitCache = {};
 async function setOutfit(name){
   currentOutfit = name;
   if (name === 'default') { setEmotionVideo('neutral', true); return; }
