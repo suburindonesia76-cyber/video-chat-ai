@@ -106,7 +106,7 @@
 <body>
 
 <div id="stage">
-  <video id="stageVideo" muted loop playsinline preload="auto" autoplay></video>
+  <video id="stageVideo" muted playsinline preload="auto" autoplay></video>
   <div class="stage-top">
     <div class="stage-id">
       <span class="status-dot"></span>
@@ -179,9 +179,14 @@ async function loadEmotionVideos(){
 }
 function setEmotionVideo(emo, instant){
   if (currentOutfit !== 'default') return;
+  if (emo === 'neutral') {
+    if (!instant) { stageVideo.style.opacity = '0'; setTimeout(playNeutralLoop, 300); return; }
+    playNeutralLoop(); return;
+  }
   const uri = EMOTION_VIDEOS[emo] || EMOTION_VIDEOS['neutral'];
   if (!uri || stageVideo.dataset.emo === emo) { if (uri) stageVideo.play().catch(()=>{}); return; }
   stageVideo.dataset.emo = emo;
+  stageVideo.style.transform = '';
   const swap = () => {
     stageVideo.src = uri;
     stageVideo.play().catch(()=>{});
@@ -191,10 +196,34 @@ function setEmotionVideo(emo, instant){
   stageVideo.style.opacity = '0';
   setTimeout(swap, 300);
 }
-const OUTFITS = { merah: 'avatar_baju_merah.txt', kasual: 'avatar_baju_kasual.txt', hijab: 'avatar_baju_hijab.txt', kardigan: 'avatar_baju_kardigan.txt' };
-let currentOutfit = 'default';
-const outfitCache = {};
-
+/* Variasi loop netral: 2 segmen digilir acak + cermin acak biar gerakan tidak terasa mengulang */
+const NEUTRAL_LOOPS = ['avatar.txt', 'avatar_loop_b.txt'];
+const loopCache = {};
+let lastLoopFile = '';
+async function playNeutralLoop(){
+  try {
+    const choices = NEUTRAL_LOOPS.filter(f => f !== lastLoopFile);
+    const file = choices[Math.floor(Math.random() * choices.length)] || NEUTRAL_LOOPS[0];
+    lastLoopFile = file;
+    if (!loopCache[file]) {
+      const t = await (await fetch(file)).text();
+      loopCache[file] = 'data:video/mp4;base64,' + t.trim();
+    }
+    stageVideo.dataset.emo = 'neutral';
+    stageVideo.style.transform = Math.random() < 0.4 ? 'scaleX(-1)' : '';
+    stageVideo.src = loopCache[file];
+    stageVideo.play().catch(()=>{});
+    stageVideo.style.opacity = '1';
+  } catch(_){}
+}
+stageVideo.addEventListener('ended', () => {
+  if (currentOutfit !== 'default' || (stageVideo.dataset.emo && stageVideo.dataset.emo !== 'neutral')) {
+    try { stageVideo.currentTime = 0; stageVideo.play().catch(()=>{}); } catch(_){}
+    return;
+  }
+  playNeutralLoop();
+});
+const OUTFITS = { merah: 'avatar_baju_merah.txt', kasual: 'avatar_baju_kasual.txt', hijab: 'avatar_baju_hijab.txt', sporty: 'avatar_baju_sporty.txt', gaun: 'avatar_baju_gaun.txt' };
 async function setOutfit(name){
   currentOutfit = name;
   if (name === 'default') { setEmotionVideo('neutral', true); return; }
@@ -204,6 +233,7 @@ async function setOutfit(name){
       outfitCache[name] = 'data:video/mp4;base64,' + t.trim();
     }
     stageVideo.dataset.emo = 'outfit-' + name;
+    stageVideo.style.transform = '';
     stageVideo.style.opacity = '0';
     setTimeout(() => {
       stageVideo.src = outfitCache[name];
@@ -634,7 +664,7 @@ function handleCommand(raw){
   if ((m = t.match(/^ganti baju\s+(.+)/))) {
     const name = m[1].trim().replace(/\s+/g, '');
     if (name === 'awal' || name === 'default' || name === 'semula') { setOutfit('default'); return 'Aku kembali ke baju awal~'; }
-    if (!OUTFITS[name]) return 'Bajunya nggak ada, sayang. Pilih: merah, kasual, hijab, atau kardigan.';
+    if (!OUTFITS[name]) return 'Bajunya nggak ada, sayang. Pilih: merah, kasual, hijab, sporty, atau gaun.';
     setOutfit(name);
     return 'Siap, aku ganti ke baju ' + name + '~ Lihat nih!';
   }
