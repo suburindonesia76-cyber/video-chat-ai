@@ -303,7 +303,8 @@ async function getModelList(){
   const data = await res.json();
   cachedModels = (data.models || [])
     .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-    .map(m => m.name.replace('models/', ''));
+    .map(m => m.name.replace('models/', ''))
+    .filter(n => !/tts|embedding|image|vision/i.test(n));
   return cachedModels;
 }
 
