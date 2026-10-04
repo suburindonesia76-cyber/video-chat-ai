@@ -124,7 +124,7 @@
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Model</label>
     <div class="model-row">
-      <input id="modelInput" type="text" placeholder="gemini-3.8-flash">
+      <input id="modelInput" type="text" placeholder="gemini-2.0-flash">
       <button class="btn ghost small" id="loadModelsBtn" title="Muat daftar model dari API">↻</button>
     </div>
     <label>Pilih dari daftar (setelah tekan ↻)</label>
@@ -147,7 +147,7 @@ const muteBtn = document.getElementById('muteBtn');
 const hint = document.getElementById('hint');
 
 let apiKey = localStorage.getItem('aya_api_key') || '';
-let model = localStorage.getItem('aya_model') || 'gemini-3.8-flash';
+let model = localStorage.getItem('aya_model') || 'gemini-2.0-flash';
 let muted = localStorage.getItem('aya_muted') === '1';
 let history = [];
 let busy = false;
@@ -175,7 +175,7 @@ document.getElementById('settingsBtn').onclick = () => {
 document.getElementById('closeSettings').onclick = () => settingsModal.classList.remove('open');
 document.getElementById('saveSettings').onclick = () => {
   apiKey = apiKeyInput.value.trim();
-  model = modelInput.value.trim() || 'gemini-3.8-flash';
+  model = modelInput.value.trim() || 'gemini-2.0-flash';
   localStorage.setItem('aya_api_key', apiKey);
   localStorage.setItem('aya_model', model);
   settingsModal.classList.remove('open');
@@ -263,12 +263,20 @@ function speak(text){
   speechSynthesis.speak(u);
 }
 
-async function askGemini(){
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const contents = history.slice(-12).map(m => ({
-    role: m.who === 'user' ? 'user' : 'model',
-    parts: [{ text: m.text }]
-  }));
+let cachedModels = null;
+async function getModelList(){
+  if (cachedModels) return cachedModels;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  cachedModels = (data.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => m.name.replace('models/', ''));
+  return cachedModels;
+}
+
+async function tryModel(modelName, contents){
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -281,14 +289,39 @@ async function askGemini(){
   if (!res.ok) {
     let msg = 'HTTP ' + res.status;
     try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch(_){}
-    if (res.status === 404) msg += ' — nama model salah. Buka ⚙️ lalu tekan ↻ untuk pilih model yang tersedia.';
-    if (res.status === 400 && /key/i.test(msg)) msg += ' — API key tidak valid.';
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   const data = await res.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   if (!text) throw new Error('Respons kosong dari AI.');
   return text;
+}
+
+async function askGemini(){
+  const contents = history.slice(-12).map(m => ({
+    role: m.who === 'user' ? 'user' : 'model',
+    parts: [{ text: m.text }]
+  }));
+  // coba model utama dulu; kalau sibuk/gagal, otomatis coba model lain
+  let candidates = [model];
+  try {
+    const others = (await getModelList()).filter(m => m !== model);
+    candidates = candidates.concat(others);
+  } catch(_) {}
+  let lastErr = null;
+  for (const m of candidates) {
+    try { return await tryModel(m, contents); }
+    catch(e) {
+      lastErr = e;
+      if (e.status === 400) break; // key salah -> tak perlu coba model lain
+    }
+  }
+  let msg = lastErr ? lastErr.message : 'Tidak diketahui';
+  if (lastErr && (lastErr.status === 503 || /high demand|overloaded|try again later/i.test(msg)))
+    msg = 'Server AI sedang sibuk semua, coba lagi beberapa saat.';
+  throw new Error(msg);
 }
 
 async function send(){
