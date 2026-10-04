@@ -145,6 +145,10 @@
       <button class="btn ghost" id="closeSettings">Tutup</button>
       <button class="btn primary" id="saveSettings">Simpan</button>
     </div>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn ghost" id="testSoundBtn">🔊 Tes suara</button>
+    </div>
+    <div id="ttsStatus" style="font-size:12px;color:#9fb3c8;min-height:16px;"></div>
   </div>
 </div>
 
@@ -279,26 +283,63 @@ function unlockAudio(){
   } catch(_){}
 }
 
-function ttsUrl(t){
-  return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=id&client=tw-ob&q=' + encodeURIComponent(t);
+const TTS_ENGINES = [
+  t => 'https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=id&client=tw-ob&q=' + encodeURIComponent(t),
+  t => 'https://translate.google.com/translate_tts?ie=UTF-8&tl=id&client=tw-ob&q=' + encodeURIComponent(t),
+];
+
+function setTtsStatus(s){
+  const el = document.getElementById('ttsStatus');
+  if (el) el.textContent = s ? ('Status suara: ' + s) : '';
+}
+
+function browserTts(text, cb){
+  const fin = (ok) => { setTtsStatus(ok ? 'OK (suara HP)' : 'gagal — coba ketuk Tes suara'); cb(); };
+  try {
+    if (!('speechSynthesis' in window)) { fin(false); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.slice(0, 400));
+    u.lang = 'id-ID'; u.rate = 1.02; u.pitch = 1.1;
+    let done = false;
+    const once = (ok) => { if (done) return; done = true; fin(ok); };
+    u.onend = () => once(true);
+    u.onerror = () => once(false);
+    setTimeout(() => once(false), 12000);
+    speechSynthesis.speak(u);
+  } catch(_) { fin(false); }
 }
 
 function playTts(text){
   const chunks = (text.match(/[^.!?…]+[.!?…]+/g) || [text]).map(s => s.trim()).filter(Boolean).slice(0, 6);
-  let i = 0;
-  const next = () => {
-    if (muted || i >= chunks.length) return;
+  let ci = 0;
+  const playChunk = (eng) => {
+    if (muted || ci >= chunks.length) return;
+    if (eng >= TTS_ENGINES.length) { browserTts(chunks[ci], () => { ci++; playChunk(0); }); return; }
+    const a = new Audio();
+    currentAudio = a;
+    let done = false;
+    const advance = (ok) => {
+      if (done) return; done = true;
+      if (ok) { setTtsStatus('OK'); ci++; playChunk(0); }
+      else { playChunk(eng + 1); }
+    };
+    a.onended = () => advance(true);
+    a.onerror = () => advance(false);
     try {
-      const a = new Audio();
-      currentAudio = a;
-      a.src = ttsUrl(chunks[i++].slice(0, 200));
-      a.onended = next;
-      a.onerror = next;
-      a.play().catch(()=>{});
-    } catch(_) { next(); }
+      a.src = TTS_ENGINES[eng](chunks[ci].slice(0, 200));
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => advance(false));
+    } catch(_) { advance(false); }
   };
-  next();
+  playChunk(0);
 }
+
+document.getElementById('testSoundBtn').onclick = () => {
+  unlockAudio();
+  if (muted) { muted = false; localStorage.setItem('aya_muted', '0'); updateMuteIcon(); }
+  setTtsStatus('mengetes…');
+  playTts('Halo! Ini suara Aya. Kalau kamu mendengar ini, berarti suara sudah berfungsi.');
+};
 
 function stopSpeak(){
   if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
