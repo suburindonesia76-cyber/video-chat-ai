@@ -105,7 +105,7 @@
 <body>
 
 <div id="stage">
-  <video id="stageVideo" muted loop playsinline autoplay></video>
+  <video id="stageVideo" muted loop playsinline preload="auto"></video>
   <div class="stage-top">
     <div class="stage-id">
       <span class="status-dot"></span>
@@ -162,7 +162,7 @@ const muteBtn = document.getElementById('muteBtn');
 const hint = document.getElementById('hint');
 
 stageVideo.src = AVATAR_VIDEO;
-stageVideo.play().catch(()=>{});
+stageVideo.load();
 
 let apiKey = localStorage.getItem('aya_api_key') || '';
 let model = localStorage.getItem('aya_model') || 'gemini-3.8-flash';
@@ -177,7 +177,7 @@ muteBtn.onclick = () => {
   muted = !muted;
   localStorage.setItem('aya_muted', muted ? '1' : '0');
   updateMuteIcon();
-  if (muted) speechSynthesis.cancel();
+  stopSpeak();
 };
 
 const settingsModal = document.getElementById('settingsModal');
@@ -268,31 +268,55 @@ function showTyping(){
 }
 function hideTyping(){ document.getElementById('typing')?.remove(); }
 
-function pickVoice(){
-  const vs = speechSynthesis.getVoices();
-  return vs.find(v => v.lang.toLowerCase().startsWith('id') && /female|gadis|wanita|perempuan/i.test(v.name))
-      || vs.find(v => v.lang.toLowerCase().startsWith('id'))
-      || null;
-}
-if ('speechSynthesis' in window) {
-  speechSynthesis.getVoices();
-  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+let currentAudio = null, speakTimer = null;
+
+// dipanggil sinkron di dalam tap tombol kirim agar browser mengizinkan audio
+function unlockAudio(){
+  try {
+    const a = new Audio();
+    a.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    a.play().catch(()=>{});
+  } catch(_){}
 }
 
+function ttsUrl(t){
+  return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=id&client=tw-ob&q=' + encodeURIComponent(t);
+}
+
+function playTts(text){
+  const chunks = (text.match(/[^.!?…]+[.!?…]+/g) || [text]).map(s => s.trim()).filter(Boolean).slice(0, 6);
+  let i = 0;
+  const next = () => {
+    if (muted || i >= chunks.length) return;
+    try {
+      const a = new Audio();
+      currentAudio = a;
+      a.src = ttsUrl(chunks[i++].slice(0, 200));
+      a.onended = next;
+      a.onerror = next;
+      a.play().catch(()=>{});
+    } catch(_) { next(); }
+  };
+  next();
+}
+
+function stopSpeak(){
+  if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
+  if (currentAudio) { try { currentAudio.pause(); } catch(_){} currentAudio = null; }
+  stage.classList.remove('talking');
+  try { stageVideo.pause(); } catch(_){}
+}
+
+// video avatar hanya bergerak saat bot "berbicara", mengikuti chat
 function speak(text){
-  if (muted || !('speechSynthesis' in window)) return;
-  speechSynthesis.cancel();
-  const clean = text.replace(/[*_#`]/g, '').slice(0, 500);
-  const u = new SpeechSynthesisUtterance(clean);
-  u.lang = 'id-ID';
-  const v = pickVoice();
-  if (v) u.voice = v;
-  u.rate = 1.03; u.pitch = 1.15;
-  u.onstart = () => stage.classList.add('talking');
-  const stop = () => stage.classList.remove('talking');
-  u.onend = stop; u.onerror = stop;
-  setTimeout(stop, 30000);
-  speechSynthesis.speak(u);
+  stopSpeak();
+  const clean = text.replace(/[*_#`]/g, '').trim().slice(0, 600);
+  if (!clean) return;
+  const dur = Math.min(25000, Math.max(5000, clean.length * 110));
+  stage.classList.add('talking');
+  try { stageVideo.play().catch(()=>{}); } catch(_){}
+  speakTimer = setTimeout(stopSpeak, dur);
+  if (!muted) playTts(clean);
 }
 
 let cachedModels = null;
@@ -374,6 +398,8 @@ async function send(){
   if (!text || busy) return;
   if (!apiKey) { settingsModal.classList.add('open'); return; }
   busy = true; sendBtn.disabled = true;
+  unlockAudio();
+  stopSpeak();
   input.value = '';
   addMsg(text, 'user');
   history.push({ who:'user', text });
@@ -399,6 +425,7 @@ setTimeout(() => {
   const greet = 'Hai! Aku Aya. Senang ketemu kamu! Mau ngobrol apa hari ini?';
   addMsg(greet, 'bot');
   history.push({ who:'bot', text: greet });
+  speak(greet);
 }, 600);
 </script>
 </body>
