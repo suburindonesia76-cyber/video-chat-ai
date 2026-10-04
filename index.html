@@ -662,7 +662,7 @@ function handleCommand(raw){
     } catch(_) { return 'Aku nggak bisa ngitung itu.'; }
   }
   if (/jam berapa/.test(t)) return 'Sekarang jam ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '.';
-  if (/^(daftar|list)\s+baju|baju apa/.test(t)) return 'Baju yang tersedia: merah, kasual, hijab, kardigan. Ketik misalnya "ganti baju merah".';
+  if (/^(daftar|list)\s+baju|baju apa/.test(t)) return 'Baju yang tersedia: merah, kasual, hijab, sporty, gaun. Ketik misalnya "ganti baju merah".';
   if ((m = t.match(/^ganti baju\s+(.+)/))) {
     const name = m[1].trim().replace(/\s+/g, '');
     if (name === 'awal' || name === 'default' || name === 'semula') { setOutfit('default'); return 'Aku kembali ke baju awal~'; }
