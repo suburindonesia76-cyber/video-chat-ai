@@ -105,7 +105,7 @@
 <body>
 
 <div id="stage">
-  <video id="stageVideo" muted loop playsinline preload="auto"></video>
+  <video id="stageVideo" muted loop playsinline preload="auto" autoplay></video>
   <div class="stage-top">
     <div class="stage-id">
       <span class="status-dot"></span>
@@ -167,7 +167,7 @@ const hint = document.getElementById('hint');
 
 fetch('avatar.txt').then(r => r.text()).then(t => {
   stageVideo.src = 'data:video/mp4;base64,' + t.trim();
-  stageVideo.load();
+  stageVideo.play().catch(()=>{});
 }).catch(()=>{});
 
 let apiKey = localStorage.getItem('aya_api_key') || '';
@@ -421,7 +421,7 @@ function stopSpeak(){
   if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
   if (currentAudio) { try { currentAudio.pause(); } catch(_){} currentAudio = null; }
   stage.classList.remove('talking');
-  try { stageVideo.pause(); } catch(_){}
+  try { stageVideo.play().catch(()=>{}); } catch(_){}
 }
 
 // video avatar hanya bergerak saat bot "berbicara", mengikuti chat
@@ -441,7 +441,6 @@ async function speak(text){
   }
   if (stillMine()) {
     stage.classList.remove('talking');
-    try { stageVideo.pause(); } catch(_){}
   }
 }
 
