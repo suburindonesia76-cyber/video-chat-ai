@@ -75,17 +75,20 @@
              justify-content:center; z-index:20; padding:20px; }
   .modal-bg.open{ display:flex; }
   .modal{ background:var(--card); border-radius:20px; padding:22px; width:100%; max-width:380px;
-          border:1px solid rgba(232,121,168,.25); }
+          border:1px solid rgba(232,121,168,.25); max-height:85dvh; overflow-y:auto; }
   .modal h2{ font-size:18px; margin-bottom:6px; }
   .modal p{ font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.5; }
   .modal label{ font-size:13px; color:var(--muted); display:block; margin:10px 0 4px; }
-  .modal input{ width:100%; border-radius:12px; border:1px solid rgba(232,121,168,.3);
+  .modal input, .modal select{ width:100%; border-radius:12px; border:1px solid rgba(232,121,168,.3);
                 background:var(--bg2); color:var(--text); padding:10px 12px; font-size:14px; outline:none; }
   .modal .row{ display:flex; gap:8px; margin-top:16px; }
   .btn{ flex:1; padding:12px; border-radius:14px; border:none; font-size:15px; font-weight:600; cursor:pointer; }
   .btn.primary{ background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
   .btn.ghost{ background:transparent; border:1px solid rgba(232,121,168,.35); color:var(--text); }
+  .btn.small{ flex:0 0 auto; padding:10px 14px; font-size:13px; }
   .modal a{ color:var(--accent); }
+  .model-row{ display:flex; gap:8px; }
+  .model-row input{ flex:1; }
   .hint{ text-align:center; font-size:12px; color:var(--muted); padding:6px 0 2px; }
 </style>
 </head>
@@ -120,7 +123,12 @@
     <label>Gemini API Key</label>
     <input id="apiKeyInput" type="password" placeholder="AIza...">
     <label>Model</label>
-    <input id="modelInput" type="text" placeholder="gemini-2.0-flash">
+    <div class="model-row">
+      <input id="modelInput" type="text" placeholder="gemini-2.0-flash">
+      <button class="btn ghost small" id="loadModelsBtn" title="Muat daftar model dari API">↻</button>
+    </div>
+    <label>Pilih dari daftar (setelah tekan ↻)</label>
+    <select id="modelSelect"><option value="">— tekan ↻ dulu —</option></select>
     <div class="row">
       <button class="btn ghost" id="closeSettings">Tutup</button>
       <button class="btn primary" id="saveSettings">Simpan</button>
@@ -155,21 +163,56 @@ muteBtn.onclick = () => {
 };
 
 const settingsModal = document.getElementById('settingsModal');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const modelInput = document.getElementById('modelInput');
+const modelSelect = document.getElementById('modelSelect');
+
 document.getElementById('settingsBtn').onclick = () => {
-  document.getElementById('apiKeyInput').value = apiKey;
-  document.getElementById('modelInput').value = model;
+  apiKeyInput.value = apiKey;
+  modelInput.value = model;
   settingsModal.classList.add('open');
 };
 document.getElementById('closeSettings').onclick = () => settingsModal.classList.remove('open');
 document.getElementById('saveSettings').onclick = () => {
-  apiKey = document.getElementById('apiKeyInput').value.trim();
-  model = document.getElementById('modelInput').value.trim() || 'gemini-2.0-flash';
+  apiKey = apiKeyInput.value.trim();
+  model = modelInput.value.trim() || 'gemini-2.0-flash';
   localStorage.setItem('aya_api_key', apiKey);
   localStorage.setItem('aya_model', model);
   settingsModal.classList.remove('open');
   updateHint();
 };
 settingsModal.addEventListener('click', e => { if (e.target === settingsModal) settingsModal.classList.remove('open'); });
+
+document.getElementById('loadModelsBtn').onclick = async () => {
+  const key = apiKeyInput.value.trim();
+  if (!key) { alert('Isi API key dulu.'); return; }
+  const btn = document.getElementById('loadModelsBtn');
+  btn.textContent = '…'; btn.disabled = true;
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const models = (data.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent'));
+    modelSelect.innerHTML = '';
+    if (!models.length) modelSelect.innerHTML = '<option value="">Tidak ada model ditemukan</option>';
+    models.forEach(m => {
+      const name = m.name.replace('models/', '');
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      modelSelect.appendChild(o);
+    });
+    if (models.length) {
+      const cur = modelInput.value.trim();
+      const match = models.some(m => m.name.replace('models/','') === cur);
+      modelSelect.value = match ? cur : modelSelect.options[0].value;
+      modelInput.value = modelSelect.value;
+    }
+  } catch(e) {
+    alert('Gagal memuat daftar model: ' + e.message);
+  }
+  btn.textContent = '↻'; btn.disabled = false;
+};
+modelSelect.onchange = () => { if (modelSelect.value) modelInput.value = modelSelect.value; };
 
 function updateHint(){
   hint.textContent = apiKey ? '' : '⚠️ Masukkan Gemini API key gratis di pengaturan (⚙️) untuk mulai chat';
@@ -216,7 +259,6 @@ function speak(text){
   u.onstart = () => avatarWrap.classList.add('talking');
   const stop = () => avatarWrap.classList.remove('talking');
   u.onend = stop; u.onerror = stop;
-  // fallback: animasi berhenti max 30 detik
   setTimeout(stop, 30000);
   speechSynthesis.speak(u);
 }
@@ -237,8 +279,11 @@ async function askGemini(){
     })
   });
   if (!res.ok) {
-    const t = await res.text();
-    throw new Error(res.status === 400 && t.includes('API key') ? 'API key tidak valid.' : `Error ${res.status}`);
+    let msg = 'HTTP ' + res.status;
+    try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch(_){}
+    if (res.status === 404) msg += ' — nama model salah. Buka ⚙️ lalu tekan ↻ untuk pilih model yang tersedia.';
+    if (res.status === 400 && /key/i.test(msg)) msg += ' — API key tidak valid.';
+    throw new Error(msg);
   }
   const data = await res.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -263,7 +308,7 @@ async function send(){
     speak(reply);
   } catch(e) {
     hideTyping();
-    addMsg('Maaf, ada gangguan: ' + e.message + ' Cek API key di pengaturan (⚙️).', 'bot', true);
+    addMsg('Maaf, ada gangguan: ' + e.message, 'bot', true);
   }
   busy = false; sendBtn.disabled = false;
   input.focus();
@@ -272,7 +317,6 @@ async function send(){
 sendBtn.onclick = send;
 input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
 
-// sapa pembuka
 setTimeout(() => {
   const greet = 'Hai! Aku Aya. Senang ketemu kamu! Mau ngobrol apa hari ini?';
   addMsg(greet, 'bot');
